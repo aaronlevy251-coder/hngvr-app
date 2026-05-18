@@ -467,7 +467,7 @@ function fbInit(){
   _fb = firebase.database();
   _fbInit = true;
   console.log('Firebase initialized');
-  fbInit();
+  startFbSync();
 }
 
 // Push a single game to Firebase
@@ -488,6 +488,7 @@ function fbListenGames(){
   const ref = _fb.ref('games');
   const handler = ref.on('value', (snap) => {
     const data = snap.val();
+    console.log('[fb games] update received', data ? Object.keys(data).length + ' games' : 'no games');
     if(!data){
       // Server has no live games
       const had = S.games.some(g => g.status === 'live' || g.status === 'scheduled');
@@ -520,15 +521,16 @@ function fbListenGames(){
     const before = S.games.length;
     S.games = S.games.filter(g => g.status === 'final' || remoteIds.has(g.id));
     if(S.games.length !== before) changed = true;
-    if(changed){
-      save();
-      rGamesIfActive();
-      rHomeIfActive();
-      // Light update: just clock displays on live games
-      S.games.filter(g => g.status === 'live').forEach(g => {
-        document.querySelectorAll(`[data-clockid="${g.id}"]`).forEach(el => { el.textContent = g.clk || '18:00'; });
-      });
-    }
+    // Always save and re-render on every listener fire — ensures UI catches up
+    // even if the user is mid-interaction or the diff-detection misses something.
+    save();
+    rGamesIfActive();
+    rHomeIfActive();
+    // Light update: just clock displays on live games
+    S.games.filter(g => g.status === 'live').forEach(g => {
+      document.querySelectorAll(`[data-clockid="${g.id}"]`).forEach(el => { el.textContent = g.clk || '18:00'; });
+    });
+    console.log('[fb games] S.games now has', S.games.length, 'games');
   }, (err) => console.warn('games listener error', err));
   _fbListeners.push({ ref, handler });
 }
@@ -602,10 +604,12 @@ function rPlayersIfActive(){ if(document.getElementById('page-players') && docum
 function startFbSync(){
   // small delay to let the rest of app finish initial render
   setTimeout(() => {
+    console.log('Attaching Firebase listeners...');
     fbListenGames();
     fbListenTeams();
     fbListenPlayers();
     fbListenNews();
+    console.log('All listeners attached');
     setSyncStatus('LIVE', 'var(--green)');
   }, 500);
 }
@@ -698,6 +702,8 @@ function goPage(n,btn){
   document.querySelectorAll('.nb').forEach(b=>b.classList.remove('active'));
   document.getElementById('page-'+n).classList.add('active');
   if(btn)btn.classList.add('active');
+  // Phase 1: remember the active tab so refresh restores it
+  try { localStorage.setItem('hngvr_lastTab', n); } catch(e){}
   if(n==='home')rHomePage();
   else if(n==='games'){rGames();}
   else if(n==='players')rPlayers();
@@ -2816,7 +2822,21 @@ if(S._statsVer!==6){
     setTimeout(()=>{fbPushPlayers();fbPushTeams();},1000);
   }
     fbInit();
-  rHomePage();
+  // Phase 1: restore the last-active tab (defaults to Home if none saved)
+  const lastTab = (function(){ try { return localStorage.getItem('hngvr_lastTab'); } catch(e){ return null; } })();
+  if(lastTab && ['home','games','players','hof','manage'].includes(lastTab) && lastTab !== 'home'){
+    // Find the matching nav button and trigger its click handler
+    const navBtns = document.querySelectorAll('.bnav .nb');
+    const navOrder = ['home','games','players','hof','manage'];
+    const idx = navOrder.indexOf(lastTab);
+    if(idx >= 0 && navBtns[idx]){
+      goPage(lastTab, navBtns[idx]);
+    } else {
+      rHomePage();
+    }
+  } else {
+    rHomePage();
+  }
   // Service worker registration (Phase 1 — offline cache + installable PWA)
   if('serviceWorker' in navigator){
     navigator.serviceWorker.register('sw.js').then(reg => {
