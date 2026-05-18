@@ -526,6 +526,10 @@ function fbListenGames(){
     save();
     rGamesIfActive();
     rHomeIfActive();
+    // If a game detail modal is open showing one of the updated games, refresh it too
+    if(detailGameId){
+      rGameDetailIfOpen(detailGameId);
+    }
     // Light update: just clock displays on live games
     S.games.filter(g => g.status === 'live').forEach(g => {
       document.querySelectorAll(`[data-clockid="${g.id}"]`).forEach(el => { el.textContent = g.clk || '18:00'; });
@@ -599,6 +603,21 @@ function fbListenNews(){
 function rGamesIfActive(){ if(document.getElementById('page-games') && document.getElementById('page-games').classList.contains('active')) rGames(); }
 function rHomeIfActive(){ if(document.getElementById('page-home') && document.getElementById('page-home').classList.contains('active')) rHomePage(); }
 function rPlayersIfActive(){ if(document.getElementById('page-players') && document.getElementById('page-players').classList.contains('active')) rPlayers(); }
+// Re-render the game detail modal if it's currently open showing the given game
+function rGameDetailIfOpen(gameId){
+  if(detailGameId !== gameId) return;
+  const g = gGame(gameId);
+  if(!g) return;
+  // Re-render entire modal (header with new scores, etc.) ...
+  renderGameDetailModal(g);
+  // ... then restore the currently-active sub-tab (feed / box1 / box2)
+  const body = document.getElementById('game-detail-body');
+  if(body){
+    if(detailTab === 'feed'){ body.innerHTML = renderFeed(g); document.getElementById('gtab-feed')?.classList.add('active'); document.getElementById('gtab-box1')?.classList.remove('active'); document.getElementById('gtab-box2')?.classList.remove('active'); }
+    else if(detailTab === 'box1'){ body.innerHTML = renderBoxScore(g,1); document.getElementById('gtab-feed')?.classList.remove('active'); document.getElementById('gtab-box1')?.classList.add('active'); document.getElementById('gtab-box2')?.classList.remove('active'); }
+    else if(detailTab === 'box2'){ body.innerHTML = renderBoxScore(g,2); document.getElementById('gtab-feed')?.classList.remove('active'); document.getElementById('gtab-box1')?.classList.remove('active'); document.getElementById('gtab-box2')?.classList.add('active'); }
+  }
+}
 
 // Activate all listeners. Called once SDK is initialized.
 function startFbSync(){
@@ -961,10 +980,12 @@ function fmtDate(d){
 // GAME DETAIL MODAL (viewer)
 // ═══════════════════════════════════
 let detailTab='feed'; // 'feed' | 'box1' | 'box2'
+let detailGameId=null; // id of game currently shown in the detail modal (null if closed)
 
 function openGameDetail(id){
   const g=gGame(id);if(!g)return;
   detailTab='feed';
+  detailGameId=id;
   renderGameDetailModal(g);
   openModal();
 }
@@ -2527,7 +2548,12 @@ function deleteGame(id){
 // MODAL
 // ═══════════════════════════════════
 function openModal(){document.getElementById('mo').classList.add('open');}
-function closeModal(e){if(!e||e.target===document.getElementById('mo'))document.getElementById('mo').classList.remove('open');}
+function closeModal(e){
+  if(!e||e.target===document.getElementById('mo')){
+    document.getElementById('mo').classList.remove('open');
+    detailGameId=null;
+  }
+}
 function syncClkInput(gid,val){
   // Keep clkSecs in sync as admin types, without starting the clock
   const g=gGame(gid);if(!g||g.clkRunning)return;
