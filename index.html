@@ -545,9 +545,11 @@ function fbListenTeams(){
   const ref = _fb.ref('teams');
   const handler = ref.on('value', (snap) => {
     const data = snap.val();
-    if(!data || !Array.isArray(data)) return;
-    if(JSON.stringify(S.teams) !== JSON.stringify(data)){
-      S.teams = data;
+    if(!data) return;
+    // Firebase returns objects with numeric keys, convert to array
+    const teamsArray = Array.isArray(data) ? data : Object.values(data);
+    if(JSON.stringify(S.teams) !== JSON.stringify(teamsArray)){
+      S.teams = teamsArray;
       save();
       rPlayersIfActive();
     }
@@ -561,9 +563,11 @@ function fbListenPlayers(){
   const ref = _fb.ref('players');
   const handler = ref.on('value', (snap) => {
     const data = snap.val();
-    if(!data || !Array.isArray(data)) return;
+    if(!data) return;
+    // Firebase returns objects with numeric keys, convert to array
+    const playersArray = Array.isArray(data) ? data : Object.values(data);
     let changed = false;
-    data.forEach(remote => {
+    playersArray.forEach(remote => {
       if(!remote) return;
       const local = S.players.find(p => p.id === remote.id);
       if(local){
