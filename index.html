@@ -504,15 +504,19 @@ function fbListenGames(){
     Object.values(data).forEach(fbGame => {
       if(!fbGame || !fbGame.id) return;
       remoteIds.add(fbGame.id);
+      // Normalize Firebase objects-as-arrays back to real arrays
+      if(fbGame.plays && !Array.isArray(fbGame.plays)) fbGame.plays = Object.values(fbGame.plays);
+      if(!fbGame.plays) fbGame.plays = [];
+      if(fbGame.roster1 && !Array.isArray(fbGame.roster1)) fbGame.roster1 = Object.values(fbGame.roster1);
+      if(fbGame.roster2 && !Array.isArray(fbGame.roster2)) fbGame.roster2 = Object.values(fbGame.roster2);
+      if(fbGame.subs && !Array.isArray(fbGame.subs)) fbGame.subs = Object.values(fbGame.subs);
       const idx = S.games.findIndex(g => g.id === fbGame.id);
       if(idx >= 0){
         if(JSON.stringify(S.games[idx]) !== JSON.stringify(fbGame)){
-          if(!fbGame.plays) fbGame.plays = [];
           S.games[idx] = fbGame;
           changed = true;
         }
       } else {
-        if(!fbGame.plays) fbGame.plays = [];
         S.games.push(fbGame);
         changed = true;
       }
@@ -705,7 +709,16 @@ function fbPullPlayers(){ return Promise.resolve(); }
 function fbPullNews(){ return Promise.resolve(); }
 
 function gp(id){return S.players.find(p=>p.id===id);}
-function gGame(id){return S.games.find(g=>g.id===id);}
+function gGame(id){
+  const g=S.games.find(g=>g.id===id);
+  if(!g) return g;
+  // Normalize Firebase objects-as-arrays every time a game is retrieved
+  if(g.plays && !Array.isArray(g.plays)) g.plays=Object.values(g.plays);
+  if(!g.plays) g.plays=[];
+  if(g.roster1 && !Array.isArray(g.roster1)) g.roster1=Object.values(g.roster1);
+  if(g.roster2 && !Array.isArray(g.roster2)) g.roster2=Object.values(g.roster2);
+  return g;
+}
 function ini(n){return n.split(' ').map(x=>x[0]).join('').toUpperCase().slice(0,2);}
 function nc(n){let h=0;for(let c of n)h=(h*31+c.charCodeAt(0))%360;return `hsl(${h},60%,45%)`;}
 function cAvg(p,s){const ss=Object.values(p.seasons).filter(x=>x.gp>0);if(!ss.length)return 0;const tg=ss.reduce((a,b)=>a+(b.gp||0),0);if(!tg)return 0;return +(ss.reduce((a,b)=>a+((b[s]||0)*(b.gp||0)),0)/tg).toFixed(1);}
