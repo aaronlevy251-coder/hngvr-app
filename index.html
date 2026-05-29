@@ -2760,7 +2760,7 @@ function rHistory(){
         ${g.date?`<div style="font-size:.65rem;color:var(--text3);padding:0 14px 8px;margin-top:-6px">${g.date}</div>`:''}
         <!-- Box score (hidden by default) -->
         ${hasBox?`<div id="box-${g.id}" style="display:none;border-top:1px solid var(--border)">
-          ${renderBoxScore(g)}
+          ${renderBoxScoreSummary(g)}
         </div>`:''}
       </div>`;
     });
@@ -2769,7 +2769,7 @@ function rHistory(){
   el.innerHTML = html;
 }
 
-function renderBoxScore(g){
+function renderBoxScoreSummary(g){
   const cols = g.s>=2;
   const hdr = cols
     ? '<div style="font-size:.62rem;color:var(--text3);font-weight:700;text-align:right;padding:0 12px 4px;display:grid;grid-template-columns:1fr 36px 36px 36px 36px"><span></span><span>PTS</span><span>REB</span><span>AST</span><span>STK</span></div>'
