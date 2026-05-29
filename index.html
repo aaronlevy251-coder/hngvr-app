@@ -1033,8 +1033,10 @@ function switchGameTab(id,tab,el){
 }
 
 function renderFeed(g){
-  if(!g.plays||!g.plays.length) return `<div style="text-align:center;padding:30px;color:var(--text3);font-size:.9rem">No plays logged yet</div>`;
-  const plays=[...g.plays].reverse();
+  const rawPlays=g.plays||[];
+  const playsArr=Array.isArray(rawPlays)?rawPlays:Object.values(rawPlays);
+  if(!playsArr.length) return `<div style="text-align:center;padding:30px;color:var(--text3);font-size:.9rem">No plays logged yet</div>`;
+  const plays=[...playsArr].reverse();
   return `<div class="play-feed">${plays.map(pl=>{
     const player=gp(pl.pid);
     const pname=player?player.name:'—';
@@ -1059,15 +1061,19 @@ function renderFeed(g){
 }
 
 function renderBoxScore(g,team){
-  const roster=team===1?(g.roster1||[]):(g.roster2||[]);
+  // Firebase returns arrays as objects with numeric keys — normalize both roster and plays
+  const rawRoster=team===1?(g.roster1||[]):(g.roster2||[]);
+  const roster=Array.isArray(rawRoster)?rawRoster:Object.values(rawRoster);
+  const rawPlays=g.plays||[];
+  const plays=Array.isArray(rawPlays)?rawPlays:Object.values(rawPlays);
   const tname=team===1?g.n1:g.n2;
   if(!roster.length) return `<div style="text-align:center;padding:30px;color:var(--text3);font-size:.9rem">No players rostered for ${tname}</div>`;
 
   // tally per-game stats from plays
   const stats={};
   roster.forEach(pid=>{stats[pid]={pts:0,reb:0,ast:0,stk:0};});
-  (g.plays||[]).forEach(pl=>{
-    if(pl.team!==team||!pl.pid||!stats[pl.pid])return;
+  plays.forEach(pl=>{
+    if(!pl||pl.team!==team||!pl.pid||!stats[pl.pid])return;
     if(pl.pts>0)stats[pl.pid].pts+=pl.pts;
     else if(pl.type==='Rebound')stats[pl.pid].reb++;
     else if(pl.type==='Assist')stats[pl.pid].ast++;
