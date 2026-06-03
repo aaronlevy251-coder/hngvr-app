@@ -983,24 +983,25 @@ function gameCard(g){
 
   let statusHTML='';
   const r1=getS5Record(g.n1), r2=getS5Record(g.n2);
-  const recStr=`<span style="font-size:.65rem;color:#8899bb;font-weight:600;margin-left:auto">${r1.w}-${r1.l} · ${r2.w}-${r2.l}</span>`;
-  if(isLive) statusHTML=`<div class="game-status-live"><div class="live-pip"></div><span style="font-weight:800">${halfLabel(g.half)}</span>&nbsp;·&nbsp;<span data-clockid="${g.id}">${g.clk||'18:00'}</span>${g.clkRunning?'':' <span style="opacity:.6">⏸</span>'}${recStr}</div>`;
-  else if(isFinal) statusHTML=`<div class="game-status-final" style="display:flex;align-items:center;width:100%"><span>Final</span><span style="font-size:.65rem;color:#8899bb;font-weight:600;margin-left:6px">${fmtDate(g.date)}</span>${recStr}</div>`;
-  else statusHTML=`<div class="game-status-sched" style="display:flex;align-items:center;width:100%"><span>${fmtDate(g.date)} · ${g.time||'TBD'}</span>${recStr}</div>`;
+  const rec1=`<span style="font-size:.62rem;color:#8899bb;font-weight:600">${r1.w}-${r1.l}</span>`;
+  const rec2=`<span style="font-size:.62rem;color:#8899bb;font-weight:600">${r2.w}-${r2.l}</span>`;
+  if(isLive) statusHTML=`<div class="game-status-live"><div class="live-pip"></div><span style="font-weight:800">${halfLabel(g.half)}</span>&nbsp;·&nbsp;<span data-clockid="${g.id}">${g.clk||'18:00'}</span>${g.clkRunning?'':' <span style="opacity:.6">⏸</span>'}</div>`;
+  else if(isFinal) statusHTML=`<div class="game-status-final">Final · ${fmtDate(g.date)}</div>`;
+  else statusHTML=`<div class="game-status-sched">${fmtDate(g.date)} · ${g.time||'TBD'}</div>`;
 
   let scoreHTML='';
   if(isLive||isFinal){
     scoreHTML=`
-      <div class="team-col"><div class="team-name-gc">${g.n1}</div></div>
+      <div class="team-col"><div class="team-name-gc">${g.n1}</div><div style="margin-top:2px">${rec1}</div></div>
       <div class="team-score-gc ${w1?'winner':''}">${g.s1}</div>
       <div class="score-sep">–</div>
       <div class="team-score-gc ${w2?'winner':''}" style="text-align:right">${g.s2}</div>
-      <div class="team-col" style="text-align:right"><div class="team-name-gc" style="text-align:right">${g.n2}</div></div>`;
+      <div class="team-col" style="text-align:right"><div class="team-name-gc" style="text-align:right">${g.n2}</div><div style="margin-top:2px;text-align:right">${rec2}</div></div>`;
   } else {
     scoreHTML=`
-      <div class="team-col"><div class="team-name-gc">${g.n1}</div></div>
+      <div class="team-col"><div class="team-name-gc">${g.n1}</div><div style="margin-top:2px">${rec1}</div></div>
       <div class="game-time-col"><div class="game-tipoff">${g.time||'TBD'}</div></div>
-      <div class="team-col" style="text-align:right"><div class="team-name-gc" style="text-align:right">${g.n2}</div></div>`;
+      <div class="team-col" style="text-align:right"><div class="team-name-gc" style="text-align:right">${g.n2}</div><div style="margin-top:2px;text-align:right">${rec2}</div></div>`;
   }
 
   return `<div class="game-card ${isLive?'live-card':''}" onclick="openGameDetail('${g.id}')">
@@ -2687,7 +2688,7 @@ function saveEditGame(id){
   g.date=document.getElementById('eg-date').value;
   const rawTime=document.getElementById('eg-time').value;
   if(rawTime){const [h,m]=rawTime.split(':');const hr=parseInt(h);g.time=`${hr>12?hr-12:hr||12}:${m} ${hr>=12?'PM':'AM'}`;}
-  const _ug=S.games.find(g=>g.id===id);saveGame(_ug);activeWk='all';closeModal();rSchedule();rGames();toast('Game updated ✓');
+  saveGame(g);activeWk='all';closeModal();rSchedule();rGames();toast('Game updated ✓');
 }
 
 function deleteGame(id){
