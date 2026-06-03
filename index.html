@@ -2045,7 +2045,21 @@ function savePlayerPhoto(id){
   }
   if(fileInput&&fileInput.files&&fileInput.files[0]){
     const reader=new FileReader();
-    reader.onload=e=>{p.photo=e.target.result;applyAndClose('Photo saved! 📸');};
+    reader.onload=e=>{
+      // Compress to ~300px JPEG so it fits in Firebase (~30KB)
+      const img=new Image();
+      img.onload=()=>{
+        const MAX=300;
+        const scale=Math.min(1,MAX/Math.max(img.width,img.height));
+        const canvas=document.createElement('canvas');
+        canvas.width=Math.round(img.width*scale);
+        canvas.height=Math.round(img.height*scale);
+        canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
+        p.photo=canvas.toDataURL('image/jpeg',0.72);
+        applyAndClose('Photo saved! 📸');
+      };
+      img.src=e.target.result;
+    };
     reader.onerror=()=>toast('File read failed','#E8192C');
     reader.readAsDataURL(fileInput.files[0]);
   } else if(urlInput){
