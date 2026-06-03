@@ -969,7 +969,7 @@ function rGames(){
   
   // Inject strip into page above content
   const stripEl=document.getElementById('wk-strip-container');
-  if(stripEl)stripEl.innerHTML=strip;
+  if(stripEl){stripEl.innerHTML=strip;}
   el.innerHTML=html;
 }
 
@@ -2036,14 +2036,21 @@ function savePlayerPhoto(id){
   const p=gp(id);if(!p)return;
   const urlInput=document.getElementById('photo-url').value.trim();
   const fileInput=document.getElementById('photo-file');
+  function applyAndRefresh(){
+    save();
+    fbPushPlayers();
+    // Rebuild the player profile in-place (modal already open)
+    showP(id);
+    toast('Photo saved! 📸');
+  }
   if(fileInput&&fileInput.files&&fileInput.files[0]){
     const reader=new FileReader();
-    reader.onload=e=>{p.photo=e.target.result;save();fbPushPlayers();closeModal();showP(id);toast('Photo saved! 📸');};
+    reader.onload=e=>{p.photo=e.target.result;applyAndRefresh();};
     reader.readAsDataURL(fileInput.files[0]);
   } else if(urlInput){
-    p.photo=urlInput;save();fbPushPlayers();closeModal();showP(id);toast('Photo saved! 📸');
+    p.photo=urlInput;applyAndRefresh();
   } else {
-    p.photo='';save();fbPushPlayers();closeModal();showP(id);toast('Photo removed');
+    p.photo='';save();fbPushPlayers();showP(id);toast('Photo removed');
   }
 }
 
@@ -2645,7 +2652,7 @@ function schedGame(){
   const szn=parseInt(document.getElementById('gszn').value)||5;
   const wk=document.getElementById('gwk').value||'Week 1';
   S.games.push({id:'g'+Date.now(),n1,n2,date,time,status:'scheduled',s1:0,s2:0,half:1,clk:'18:00',plays:[],roster1:[],roster2:[],season:szn,round:wk});
-  const _ng=S.games[S.games.length-1];saveGame(_ng);rSchedule();rGames();toast('Game scheduled! 📅');
+  const _ng=S.games[S.games.length-1];saveGame(_ng);activeWk='all';rSchedule();rGames();toast('Game scheduled! 📅');
 }
 
 function openEditGame(id){
@@ -2680,12 +2687,12 @@ function saveEditGame(id){
   g.date=document.getElementById('eg-date').value;
   const rawTime=document.getElementById('eg-time').value;
   if(rawTime){const [h,m]=rawTime.split(':');const hr=parseInt(h);g.time=`${hr>12?hr-12:hr||12}:${m} ${hr>=12?'PM':'AM'}`;}
-  const _ug=S.games.find(g=>g.id===id);saveGame(_ug);closeModal();rSchedule();rGames();toast('Game updated ✓');
+  const _ug=S.games.find(g=>g.id===id);saveGame(_ug);activeWk='all';closeModal();rSchedule();rGames();toast('Game updated ✓');
 }
 
 function deleteGame(id){
   S.games=S.games.filter(g=>g.id!==id);
-  fbDeleteGame(id);save();rSchedule();rGames();toast('Game removed');
+  fbDeleteGame(id);save();activeWk='all';rSchedule();rGames();toast('Game removed');
 }
 
 // ═══════════════════════════════════
@@ -2693,7 +2700,8 @@ function deleteGame(id){
 // ═══════════════════════════════════
 function openModal(){document.getElementById('mo').classList.add('open');}
 function closeModal(e){
-  if(!e||e.target===document.getElementById('mo')){
+  // Close if: no event, backdrop clicked, or ✕ button clicked (currentTarget != backdrop)
+  if(!e||e.target===document.getElementById('mo')||e.currentTarget!==document.getElementById('mo')){
     document.getElementById('mo').classList.remove('open');
     detailGameId=null;
   }
