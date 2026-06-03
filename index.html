@@ -1928,7 +1928,7 @@ function showP(id){
             <span>🏀 ${sp} szn${sp!==1?'s':''}</span>
           </div>
         </div>
-        ${ownerUnlocked?`<button onclick="openPhotoUpload(${p.id})" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);border-radius:8px;padding:6px 10px;font-size:.75rem;color:#fff;cursor:pointer;flex-shrink:0">📷</button>`:``}
+        ${(ownerUnlocked||pinUnlocked||analystUnlocked)?`<button onclick="openPhotoUpload(${p.id})" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);border-radius:8px;padding:6px 10px;font-size:.75rem;color:#fff;cursor:pointer;flex-shrink:0">📷</button>`:``}
       </div>
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">
         ${['pts','reb','ast','stk'].map(k=>{
@@ -2037,21 +2037,21 @@ function savePlayerPhoto(id){
   const p=gp(id);if(!p)return;
   const urlInput=document.getElementById('photo-url').value.trim();
   const fileInput=document.getElementById('photo-file');
-  function applyAndRefresh(){
+  function applyAndClose(msg){
     save();
     fbPushPlayers();
-    // Rebuild the player profile in-place (modal already open)
-    showP(id);
-    toast('Photo saved! 📸');
+    closeModal();
+    toast(msg);
   }
   if(fileInput&&fileInput.files&&fileInput.files[0]){
     const reader=new FileReader();
-    reader.onload=e=>{p.photo=e.target.result;applyAndRefresh();};
+    reader.onload=e=>{p.photo=e.target.result;applyAndClose('Photo saved! 📸');};
+    reader.onerror=()=>toast('File read failed','#E8192C');
     reader.readAsDataURL(fileInput.files[0]);
   } else if(urlInput){
-    p.photo=urlInput;applyAndRefresh();
+    p.photo=urlInput;applyAndClose('Photo saved! 📸');
   } else {
-    p.photo='';save();fbPushPlayers();showP(id);toast('Photo removed');
+    p.photo='';applyAndClose('Photo removed');
   }
 }
 
