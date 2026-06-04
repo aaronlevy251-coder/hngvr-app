@@ -1786,23 +1786,168 @@ function rPlayers(){
 function setSzn(s,el){selSzn=s;document.querySelectorAll('#szn-chips .fc').forEach(c=>c.classList.remove('active'));el.classList.add('active');rPList();}
 
 // ── TEAMS ARCHIVE ──────────────────────────────────────
+// ── STANDINGS DATA ──────────────────────────────────────────────
+const HIST_STANDINGS = {
+  1:[
+    {t:'Elliot',w:5,l:1,pf:284,pa:259},
+    {t:'Larry', w:4,l:2,pf:264,pa:255},
+    {t:'Eli',   w:3,l:3,pf:306,pa:281},
+    {t:'Aaron', w:3,l:3,pf:334,pa:328},
+    {t:'Max',   w:2,l:4,pf:293,pa:327},
+    {t:'Eric',  w:1,l:5,pf:269,pa:300},
+  ],
+  2:[
+    {t:'Eli',    w:4,l:2,pf:302,pa:296},
+    {t:'Aaron',  w:4,l:2,pf:342,pa:285},
+    {t:'Larry',  w:3,l:3,pf:298,pa:301},
+    {t:'Max',    w:3,l:3,pf:324,pa:306},
+    {t:'Eric',   w:2,l:4,pf:255,pa:324},
+    {t:'Elliot', w:2,l:4,pf:258,pa:267},
+  ],
+  3:[
+    {t:'Morris',  w:5,l:1,pf:372,pa:294},
+    {t:'Aaron',   w:5,l:1,pf:356,pa:305},
+    {t:'Elliot',  w:5,l:1,pf:313,pa:282},
+    {t:'Larry',   w:3,l:3,pf:292,pa:285},
+    {t:'Max',     w:1,l:5,pf:293,pa:333},
+    {t:'Eric',    w:1,l:5,pf:280,pa:316},
+    {t:'Eli',     w:1,l:5,pf:246,pa:337},
+  ],
+  4:[
+    {t:'Eddie',  w:4,l:2,pf:300,pa:265},
+    {t:'Eric',   w:4,l:2,pf:284,pa:266},
+    {t:'Larry',  w:3,l:3,pf:289,pa:280},
+    {t:'Max',    w:3,l:3,pf:269,pa:266},
+    {t:'Elliot', w:3,l:3,pf:220,pa:238},
+    {t:'Eli',    w:2,l:4,pf:297,pa:302},
+    {t:'Aaron',  w:2,l:4,pf:294,pa:336},
+  ],
+};
+
+// H2H wins for tiebreaking [szn][winner][loser]
+const H2H_WINS = {
+  1:{Eli:{Aaron:1},Aaron:{Eli:0}},
+  2:{
+    Eli:{Aaron:1},Aaron:{Eli:0},
+    Larry:{Max:1},Max:{Larry:0},
+    Eric:{Elliot:1},Elliot:{Eric:0},
+  },
+  3:{
+    Morris:{Aaron:1,Elliot:0},Aaron:{Morris:0,Elliot:1},Elliot:{Morris:1,Aaron:0},
+    Eli:{Max:1,Eric:0},Max:{Eli:0,Eric:1},Eric:{Eli:1,Max:0},
+  },
+  4:{
+    Eddie:{Eric:1},Eric:{Eddie:0},
+    Max:{Elliot:1,Larry:1},Elliot:{Max:0,Larry:1},Larry:{Max:0,Elliot:0},
+  },
+};
+
+function getH2H(szn,a,b){
+  return ((H2H_WINS[szn]||{})[a]||{})[b]||0;
+}
+
+function sortStandings(rows, szn){
+  return rows.slice().sort((a,b)=>{
+    if(b.w!==a.w) return b.w-a.w;
+    // H2H among tied
+    const h=getH2H(szn,a.t,b.t)-getH2H(szn,b.t,a.t);
+    if(h!==0) return h>0?-1:1;
+    return (b.pf-b.pa)-(a.pf-a.pa);
+  });
+}
+
+function getS5StandingsRows(){
+  const teams={};
+  S.games.filter(g=>g.status==='final').forEach(g=>{
+    [g.n1,g.n2].forEach(n=>{if(!teams[n])teams[n]={t:n.replace('Team ',''),n:n,w:0,l:0,pf:0,pa:0};});
+    if(g.s1>g.s2){teams[g.n1].w++;teams[g.n2].l++;}
+    else{teams[g.n2].w++;teams[g.n1].l++;}
+    teams[g.n1].pf+=g.s1;teams[g.n1].pa+=g.s2;
+    teams[g.n2].pf+=g.s2;teams[g.n2].pa+=g.s1;
+  });
+  // fill in teams with no games yet
+  S.teams.forEach(t=>{
+    const k=t.name;
+    if(!teams[k])teams[k]={t:t.name.replace('Team ',''),n:k,w:0,l:0,pf:0,pa:0};
+  });
+  return Object.values(teams).sort((a,b)=>{
+    if(b.w!==a.w)return b.w-a.w;
+    return (b.pf-b.pa)-(a.pf-a.pa);
+  });
+}
+
+function getTeamColor(shortName){
+  const map={Aaron:'#3b82f6',Max:'#e84545',Elliot:'#f59e0b',Eddie:'#10b981',Eli:'#8b5cf6',Larry:'#ec4899',Eric:'#06b6d4',Morris:'#f97316'};
+  return map[shortName]||'#8899bb';
+}
+
+function renderStandingsTable(rows, szn){
+  const top=rows[0]?.w||0;
+  let html=`<table style="width:100%;border-collapse:collapse;font-size:.78rem">
+    <thead><tr style="color:#8899bb;font-size:.62rem;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #dde4f0">
+      <th style="text-align:left;padding:5px 4px">#</th>
+      <th style="text-align:left;padding:5px 4px">Team</th>
+      <th style="padding:5px 4px">W</th><th style="padding:5px 4px">L</th>
+      <th style="padding:5px 4px">WIN%</th><th style="padding:5px 4px">GB</th>
+      <th style="padding:5px 4px">DIFF</th>
+    </tr></thead><tbody>`;
+  rows.forEach((r,i)=>{
+    const pct=r.w+r.l>0?(r.w/(r.w+r.l)).toFixed(3).replace(/^0/,''):'—';
+    const gb=i===0?'—':((top-r.w)/2).toFixed(1).replace('.0','');
+    const diff=r.pf-r.pa;
+    const diffStr=(diff>0?'+':'')+diff;
+    const diffCol=diff>0?'#10b981':diff<0?'#E8192C':'#8899bb';
+    const color=szn===5?getTeamColor(r.t):getTeamColor(r.t);
+    html+=`<tr style="border-bottom:1px solid #f0f2f8">
+      <td style="padding:6px 4px;color:#8899bb;font-size:.68rem">${i+1}</td>
+      <td style="padding:6px 4px"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${color};margin-right:5px"></span><strong>${r.t}</strong></td>
+      <td style="text-align:center;padding:6px 4px;font-weight:700">${r.w}</td>
+      <td style="text-align:center;padding:6px 4px;color:#8899bb">${r.l}</td>
+      <td style="text-align:center;padding:6px 4px">${pct}</td>
+      <td style="text-align:center;padding:6px 4px;color:#8899bb">${gb}</td>
+      <td style="text-align:center;padding:6px 4px;font-weight:700;color:${diffCol}">${diffStr}</td>
+    </tr>`;
+  });
+  html+=`</tbody></table>`;
+  return html;
+}
+
+let standingsSzn=5;
+function switchStandingsSzn(szn){
+  standingsSzn=szn;
+  document.querySelectorAll('.szn-chip').forEach(c=>{
+    c.style.background=+c.dataset.szn===szn?'#E8192C':'#eef2f8';
+    c.style.color=+c.dataset.szn===szn?'#fff':'#4a5f8a';
+  });
+  const el=document.getElementById('standings-table-wrap');
+  if(!el)return;
+  if(szn===5){el.innerHTML=renderStandingsTable(getS5StandingsRows(),5);return;}
+  const rows=sortStandings(HIST_STANDINGS[szn],szn);
+  el.innerHTML=renderStandingsTable(rows,szn);
+}
+// ── END STANDINGS DATA ──────────────────────────────────────────
+
 function rTeamsArchive(el){
-  // All seasons with their rosters from SEASON_ROSTERS constant
-  const seasons=[4,3,2,1]; // newest first
+  const seasons=[4,3,2,1];
   const seasonYears={1:'2022',2:'2023',3:'2024',4:'2025'};
   const hofChamps={1:'Elliot Almaghrabi',2:'Aaron Levy',3:'Morris Chaaya',4:'Elliot Almaghrabi'};
 
   let html='';
 
-  // Season 5 draft pending
-  html+=`<div style="background:#f4f6fb;border:2px dashed #dde4f0;border-radius:12px;padding:20px;text-align:center;margin-bottom:16px">
-    <div style="font-family:var(--fd);font-size:1.3rem;font-weight:900;color:#4a5f8a">Season 5</div>
-    <div style="font-size:.75rem;color:#8899bb;margin-top:4px">Draft Pending · 2025–26</div>
+  // ── STANDINGS SECTION ──
+  const chips=[5,4,3,2,1].map(s=>`<button class="szn-chip" data-szn="${s}" onclick="switchStandingsSzn(${s})" style="border:none;border-radius:20px;padding:4px 12px;font-size:.72rem;font-weight:700;cursor:pointer;background:${s===5?'#E8192C':'#eef2f8'};color:${s===5?'#fff':'#4a5f8a'}">${s===5?'S5 ·Live':'S'+s}</button>`).join('');
+  const s5rows=getS5StandingsRows();
+  html+=`<div class="card" style="margin-bottom:16px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div style="font-family:var(--fd);font-size:1rem;font-weight:900;letter-spacing:.5px">STANDINGS</div>
+      <div style="display:flex;gap:5px">${chips}</div>
+    </div>
+    <div id="standings-table-wrap">${renderStandingsTable(s5rows,5)}</div>
   </div>`;
 
   // Current S5 teams from S.teams
   if(S.teams.length){
-    html+=`<div style="font-size:.6rem;letter-spacing:2px;text-transform:uppercase;color:#E8192C;font-weight:700;margin-bottom:8px">Season 5 Teams (${S.teams.length})</div>`;
+    html+=`<div style="font-size:.6rem;letter-spacing:2px;text-transform:uppercase;color:#E8192C;font-weight:700;margin-bottom:8px;margin-top:4px">Season 5 Teams</div>`;
     html+=S.teams.map(t=>{
       const cap=gp(t.captainId);
       const players=t.playerIds.map(id=>gp(id)).filter(Boolean);
@@ -2904,7 +3049,7 @@ function rHistory(){
         ${g.date?`<div style="font-size:.65rem;color:#8899bb;padding:0 14px 8px;margin-top:-6px">${g.date}</div>`:''}
         <!-- Box score (hidden by default) -->
         ${hasBox?`<div id="box-${g.id}" style="display:none;border-top:1px solid #eef2f8">
-          ${renderBoxScore(g)}
+          ${renderHistBoxScore(g)}
         </div>`:''}
       </div>`;
     });
@@ -2913,7 +3058,7 @@ function rHistory(){
   el.innerHTML = html;
 }
 
-function renderBoxScore(g){
+function renderHistBoxScore(g){
   const cols = g.s>=2;
   const hdr = cols
     ? '<div style="font-size:.62rem;color:#8899bb;font-weight:700;text-align:right;padding:0 12px 4px;display:grid;grid-template-columns:1fr 36px 36px 36px 36px"><span></span><span>PTS</span><span>REB</span><span>AST</span><span>STK</span></div>'
