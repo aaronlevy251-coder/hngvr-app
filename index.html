@@ -1805,22 +1805,22 @@ const HIST_STANDINGS = {
     {t:'Elliot', w:2,l:4,pf:258,pa:267},
   ],
   3:[
-    {t:'Morris',  w:5,l:1,pf:372,pa:294},
+    {t:'Morris',  w:5,l:1,pf:362,pa:294},
     {t:'Aaron',   w:5,l:1,pf:356,pa:305},
-    {t:'Elliot',  w:5,l:1,pf:313,pa:282},
+    {t:'Elliot',  w:5,l:1,pf:313,pa:272},
     {t:'Larry',   w:3,l:3,pf:292,pa:285},
-    {t:'Max',     w:1,l:5,pf:293,pa:333},
     {t:'Eric',    w:1,l:5,pf:280,pa:316},
+    {t:'Max',     w:1,l:5,pf:293,pa:333},
     {t:'Eli',     w:1,l:5,pf:246,pa:337},
   ],
   4:[
     {t:'Eddie',  w:4,l:2,pf:300,pa:265},
     {t:'Eric',   w:4,l:2,pf:284,pa:266},
-    {t:'Larry',  w:3,l:3,pf:289,pa:280},
     {t:'Max',    w:3,l:3,pf:269,pa:266},
     {t:'Elliot', w:3,l:3,pf:220,pa:238},
-    {t:'Eli',    w:2,l:4,pf:297,pa:302},
+    {t:'Larry',  w:3,l:3,pf:289,pa:280},
     {t:'Aaron',  w:2,l:4,pf:294,pa:336},
+    {t:'Eli',    w:2,l:4,pf:297,pa:302},
   ],
 };
 
@@ -1833,12 +1833,13 @@ const H2H_WINS = {
     Eric:{Elliot:1},Elliot:{Eric:0},
   },
   3:{
-    Morris:{Aaron:1,Elliot:0},Aaron:{Morris:0,Elliot:1},Elliot:{Morris:1,Aaron:0},
-    Eli:{Max:1,Eric:0},Max:{Eli:0,Eric:1},Eric:{Eli:1,Max:0},
+    Morris:{Aaron:1,Elliot:1},Aaron:{Morris:0,Elliot:1},Elliot:{Morris:0,Aaron:0},
+    Eric:{Max:1,Eli:0},Max:{Eric:0,Eli:0},Eli:{Max:1,Eric:1},
   },
   4:{
     Eddie:{Eric:1},Eric:{Eddie:0},
     Max:{Elliot:1,Larry:1},Elliot:{Max:0,Larry:1},Larry:{Max:0,Elliot:0},
+    Aaron:{Eli:1},Eli:{Aaron:0},
   },
 };
 
@@ -1846,32 +1847,55 @@ function getH2H(szn,a,b){
   return ((H2H_WINS[szn]||{})[a]||{})[b]||0;
 }
 
+// Sort standings: W-L first, then H2H among tied teams, then overall point diff
 function sortStandings(rows, szn){
   return rows.slice().sort((a,b)=>{
     if(b.w!==a.w) return b.w-a.w;
-    // H2H among tied
-    const h=getH2H(szn,a.t,b.t)-getH2H(szn,b.t,a.t);
-    if(h!==0) return h>0?-1:1;
+    // Get all teams tied with the same record
+    const tied=rows.filter(r=>r.w===a.w&&r.l===a.l).map(r=>r.t);
+    if(tied.length>1){
+      // Check if H2H is a true round robin (each team 1-1 vs others)
+      const winsA=tied.filter(t=>t!==a.t).reduce((s,t)=>s+getH2H(szn,a.t,t),0);
+      const winsB=tied.filter(t=>t!==b.t).reduce((s,t)=>s+getH2H(szn,b.t,t),0);
+      if(winsA!==winsB) return winsB-winsA;
+    }
     return (b.pf-b.pa)-(a.pf-a.pa);
   });
 }
 
+// Build S5 standings from final games, with H2H tiebreaker
 function getS5StandingsRows(){
   const teams={};
-  S.games.filter(g=>g.status==='final').forEach(g=>{
-    [g.n1,g.n2].forEach(n=>{if(!teams[n])teams[n]={t:n.replace('Team ',''),n:n,w:0,l:0,pf:0,pa:0};});
-    if(g.s1>g.s2){teams[g.n1].w++;teams[g.n2].l++;}
-    else{teams[g.n2].w++;teams[g.n1].l++;}
+  const h2h={};
+  const finalGames=S.games.filter(g=>g.status==='final'&&(g.season===5||!g.season));
+  finalGames.forEach(g=>{
+    [g.n1,g.n2].forEach(n=>{
+      if(!teams[n])teams[n]={t:n.replace('Team ',''),n:n,w:0,l:0,pf:0,pa:0};
+      if(!h2h[n])h2h[n]={};
+    });
+    if(g.s1>g.s2){
+      teams[g.n1].w++;teams[g.n2].l++;
+      h2h[g.n1][g.n2]=(h2h[g.n1][g.n2]||0)+1;
+    } else {
+      teams[g.n2].w++;teams[g.n1].l++;
+      h2h[g.n2][g.n1]=(h2h[g.n2][g.n1]||0)+1;
+    }
     teams[g.n1].pf+=g.s1;teams[g.n1].pa+=g.s2;
     teams[g.n2].pf+=g.s2;teams[g.n2].pa+=g.s1;
   });
-  // fill in teams with no games yet
   S.teams.forEach(t=>{
     const k=t.name;
     if(!teams[k])teams[k]={t:t.name.replace('Team ',''),n:k,w:0,l:0,pf:0,pa:0};
   });
-  return Object.values(teams).sort((a,b)=>{
+  const arr=Object.values(teams);
+  return arr.slice().sort((a,b)=>{
     if(b.w!==a.w)return b.w-a.w;
+    const tied=arr.filter(r=>r.w===a.w&&r.l===a.l).map(r=>r.n);
+    if(tied.length>1){
+      const winsA=tied.filter(n=>n!==a.n).reduce((s,n)=>s+((h2h[a.n]||{})[n]||0),0);
+      const winsB=tied.filter(n=>n!==b.n).reduce((s,n)=>s+((h2h[b.n]||{})[n]||0),0);
+      if(winsA!==winsB) return winsB-winsA;
+    }
     return (b.pf-b.pa)-(a.pf-a.pa);
   });
 }
