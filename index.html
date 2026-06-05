@@ -1252,6 +1252,7 @@ function lockAdmin(){lockManage();}
 // GOOGLE SHEETS EXPORT
 // ═══════════════════════════════════
 const SHEETS_ID = '1siuDslLSj3CE8qELQ2IX-oCoZXvtWSOVHNCfZT9n1Hs';
+const SHEETS_API_KEY = 'AIzaSyDe0V0wbAiz6RdQsxpEvk9umo1g1VlKiQk';
 
 async function sheetsRequest(method, path, body){
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEETS_ID}${path}?key=`;
@@ -1290,7 +1291,7 @@ async function exportToSheets(){
 }
 
 async function getSheetsList(){
-  const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEETS_ID}?fields=sheets.properties`);
+  const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEETS_ID}?fields=sheets.properties&key=${SHEETS_API_KEY}`);
   const data = await res.json();
   return data.sheets || [];
 }
@@ -1301,7 +1302,7 @@ async function ensureSheetExists(title){
   if(existing) return existing.properties.sheetId;
 
   // Create the sheet
-  const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEETS_ID}:batchUpdate`, {
+  const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEETS_ID}:batchUpdate?key=${SHEETS_API_KEY}`, {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
     body: JSON.stringify({requests:[{addSheet:{properties:{title}}}]})
@@ -1312,12 +1313,12 @@ async function ensureSheetExists(title){
 
 async function clearAndWrite(sheetTitle, rows){
   // Clear sheet first
-  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEETS_ID}/values/${encodeURIComponent(sheetTitle)}:clear`, {
+  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEETS_ID}/values/${encodeURIComponent(sheetTitle)}:clear?key=${SHEETS_API_KEY}`, {
     method: 'POST',
     headers: {'Content-Type':'application/json'}
   });
   // Write rows
-  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEETS_ID}/values/${encodeURIComponent(sheetTitle+'!A1')}?valueInputOption=RAW`, {
+  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEETS_ID}/values/${encodeURIComponent(sheetTitle+'!A1')}?valueInputOption=RAW&key=${SHEETS_API_KEY}`, {
     method: 'PUT',
     headers: {'Content-Type':'application/json'},
     body: JSON.stringify({values: rows})
