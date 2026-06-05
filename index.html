@@ -1284,16 +1284,15 @@ async function exportBoxScores(){
   const finalGames = S.games.filter(g => g.status === 'final' && (g.season === 5 || !g.season));
   if(!finalGames.length){ return; }
 
-  // Group plays by round
+  const roundOrder = ['Week 1','Week 2','Week 3','Week 4','Week 5','Week 6','Week 7','Playoffs','Finals'];
   const byRound = {};
   finalGames.forEach(g => {
-    const round = g.round || 'Week 1';
+    const round = g.round || g.r || 'Week 1';
     if(!byRound[round]) byRound[round] = [];
     byRound[round].push(g);
   });
 
   const rows = [];
-  const roundOrder = ['Week 1','Week 2','Week 3','Week 4','Week 5','Week 6','Week 7','Playoffs','Finals'];
   const sortedRounds = Object.keys(byRound).sort((a,b) => {
     const ai = roundOrder.indexOf(a), bi = roundOrder.indexOf(b);
     return (ai===-1?99:ai) - (bi===-1?99:bi);
@@ -1302,34 +1301,31 @@ async function exportBoxScores(){
   sortedRounds.forEach(round => {
     rows.push([round, 'Points', 'Rebounds', 'Assists', 'Stocks']);
     byRound[round].forEach(g => {
-      // Add game header
       rows.push([`${g.n1} ${g.s1} — ${g.s2} ${g.n2}`]);
-      // Add plays/box score
-      const allPlays = g.plays || [];
-      // Build box score from plays
-      const box = {};
-      allPlays.forEach(play => {
-        const p = S.players.find(pl => pl.id === play.pid);
+      // Build box from last snap per player
+      const lastSnap = {};
+      const astCount = {};
+      const stkCount = {};
+      (g.plays||[]).forEach(play => {
+        if(play.snap1 !== undefined) lastSnap[play.pid] = {pts: play.snap1||0, reb: play.snap2||0};
+        if(play.type==='Assist' && play.astPid) astCount[play.astPid] = (astCount[play.astPid]||0)+1;
+        if(play.type==='Steal'||play.type==='stk') stkCount[play.pid] = (stkCount[play.pid]||0)+1;
+      });
+      // All players from both rosters
+      const t1=S.teams.find(t=>t.name===g.n1);
+      const t2=S.teams.find(t=>t.name===g.n2);
+      const pids=[...((t1&&t1.playerIds)||g.roster1||[]),...((t2&&t2.playerIds)||g.roster2||[])];
+      pids.forEach(pid => {
+        const p = S.players.find(pl=>pl.id===pid);
         if(!p) return;
-        if(!box[p.name]) box[p.name] = {pts:0, reb:0, ast:0, stk:0};
-        if(play.type === 'pts') box[p.name].pts += play.pts || 0;
-        if(play.type === 'reb') box[p.name].reb += 1;
-        if(play.type === 'ast') box[p.name].ast += 1;
-        if(play.type === 'stk') box[p.name].stk += 1;
+        const snap = lastSnap[pid]||{pts:0,reb:0};
+        const ast = astCount[pid]||0;
+        const stk = stkCount[pid]||0;
+        if(snap.pts||snap.reb||ast||stk) rows.push([p.name, snap.pts, snap.reb, ast, stk]);
       });
-      // Also include snap stats if available
-      allPlays.forEach(play => {
-        if(play.snap1) {
-          const p = S.players.find(pl => pl.id === play.pid);
-          if(p) box[p.name] = {pts: play.snap1||0, reb: play.snap2||0, ast: 0, stk: 0};
-        }
-      });
-      Object.entries(box).forEach(([name, stats]) => {
-        rows.push([name, stats.pts, stats.reb, stats.ast, stats.stk]);
-      });
-      rows.push([]); // spacer
+      rows.push([]);
     });
-    rows.push([]); // spacer between weeks
+    rows.push([]);
   });
 
   await clearAndWrite('SZN 5', rows);
@@ -1905,7 +1901,50 @@ function confirmEndGame(id){
   const g=gGame(id);if(!g)return;
   g.status='final';
   g.clkRunning=false;
-  saveGame(g);closeModal();renderAdminPanel(document.getElementById('live-admin'));rGames();toast('Game saved as Final 🏁');
+
+  // Write stats to each player's season 5 record
+  const szn='5';
+  // Build final box score from last snap per player
+  const finalStats={};
+  (g.plays||[]).forEach(play=>{
+    if(play.snap1!==undefined){
+      if(!finalStats[play.pid]||play.clk<=finalStats[play.pid].clk){
+        // snap1=pts, snap2=reb (cumulative at time of play)
+        finalStats[play.pid]={pts:play.snap1||0,reb:play.snap2||0};
+      }
+    }
+  });
+  // Count assists and steals separately
+  (g.plays||[]).forEach(play=>{
+    if(play.type==='Assist'&&play.astPid){
+      if(!finalStats[play.astPid]) finalStats[play.astPid]={pts:0,reb:0};
+      finalStats[play.astPid].ast=(finalStats[play.astPid].ast||0)+1;
+    }
+    if(play.type==='Steal'||play.type==='stk'){
+      if(!finalStats[play.pid]) finalStats[play.pid]={pts:0,reb:0};
+      finalStats[play.pid].stk=(finalStats[play.pid].stk||0)+1;
+    }
+  });
+
+  // Get all rostered players from both teams
+  const t1=S.teams.find(t=>t.name===g.n1);
+  const t2=S.teams.find(t=>t.name===g.n2);
+  const allPids=[...((t1&&t1.playerIds)||g.roster1||[]),...((t2&&t2.playerIds)||g.roster2||[])];
+
+  allPids.forEach(pid=>{
+    const p=S.players.find(pl=>pl.id===pid);
+    if(!p) return;
+    if(!p.seasons) p.seasons={};
+    if(!p.seasons[szn]) p.seasons[szn]={pts:0,reb:0,ast:0,stk:0,gp:0};
+    const st=finalStats[pid]||{pts:0,reb:0,ast:0,stk:0};
+    p.seasons[szn].pts+=(st.pts||0);
+    p.seasons[szn].reb+=(st.reb||0);
+    p.seasons[szn].ast+=(st.ast||0);
+    p.seasons[szn].stk+=(st.stk||0);
+    p.seasons[szn].gp+=1;
+  });
+
+  saveGame(g);save();closeModal();renderAdminPanel(document.getElementById('live-admin'));rGames();toast('Game saved as Final 🏁');
 }
 
 // ═══════════════════════════════════
