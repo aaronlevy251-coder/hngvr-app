@@ -647,7 +647,7 @@ function setSyncStatus(text, color){
 function saveGame(game){
   save();
   if(game && (game.status === 'live' || game.status === 'scheduled')) fbPushGame(game);
-  if(game && game.status === 'final') fbDeleteGame(game.id);
+  if(game && game.status === 'final') fbPushGame(game); // keep final games in Firebase
 }
 
 // Push all teams to Firebase
