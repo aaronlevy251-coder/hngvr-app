@@ -973,7 +973,7 @@ function rGames(){
   el.innerHTML=html;
 }
 
-function setWk(id){activeWk=id;rGames();}
+function setWk(id){activeWk=id;rGames();const hEl=document.getElementById("games-history");if(hEl&&hEl.style.display!=="none")rHistory();}
 
 function gameCard(g){
   const isLive=g.status==='live';
@@ -2569,6 +2569,15 @@ function saveStats(pid,zn,type){const p=gp(pid);if(!p)return;const src=type==='r
 function removeP(id){S.players=S.players.filter(p=>p.id!==id);save();fbPushPlayers();closeModal();rManage();toast('Removed');}
 
 const TEAM_COLORS=['#1565C0','#3b82f6','#22c55e','#a855f7','#ec4899','#eab308','#14b8a6','#ef4444','#f59e0b','#6366f1'];
+const S5_TEAM_CFG={
+  'Team Aaron': {bg:'#1A1A1A', accent:'#00857C'},
+  'Team Max':   {bg:'#2B35B8', accent:'#F05A28'},
+  'Team Elliot':{bg:'#2A1A0A', accent:'#E8D48B'},
+  'Team Eddie': {bg:'#0D1B2A', accent:'#69B3E7'},
+  'Team Eli':   {bg:'#0A1A0F', accent:'#C8952C'},
+  'Team Larry': {bg:'#001A0A', accent:'#00857C'},
+  'Team Eric':  {bg:'#1A0A1A', accent:'#C8102E'},
+};
 let selectedTeamColor=TEAM_COLORS[0];
 
 function rTeams(){
@@ -2632,28 +2641,72 @@ function rTeams(){
 
     ${S.teams.length?`
     <div style="font-size:.65rem;letter-spacing:2px;text-transform:uppercase;color:#8899bb;font-weight:700;margin:14px 0 8px">CURRENT TEAMS (${S.teams.length})</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
     ${S.teams.map(t=>{
-      const cap=gp(t.captainId);
+      const cfg=S5_TEAM_CFG[t.name]||{bg:'#1a1a1a',accent:t.color||'#888'};
       const players=t.playerIds.map(id=>gp(id)).filter(Boolean);
-      return `<div class="card" style="border-left:3px solid ${t.color||'#1565C0'}">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-          <div>
-            <div style="font-family:var(--fd);font-size:1.3rem;font-weight:900;color:${t.color||'#1565C0'}">${t.name}</div>
-            ${cap?`<div style="font-size:.72rem;color:#8899bb;margin-top:2px">👑 Captain: ${cap.name}</div>`:''}
+      // get season 5 stats for each player
+      const statRow=(p)=>{
+        const s=p.seasons&&p.seasons['5']?p.seasons['5']:null;
+        const gp5=s&&s.gp?s.gp:0;
+        const fmt=(v)=>gp5>0?(v/gp5).toFixed(1):'0.0';
+        return s?`<td style="color:rgba(255,255,255,0.4);text-align:center;font-size:13px">${fmt(s.pts)}</td><td style="color:rgba(255,255,255,0.4);text-align:center;font-size:13px">${fmt(s.reb)}</td><td style="color:rgba(255,255,255,0.4);text-align:center;font-size:13px">${fmt(s.ast)}</td><td style="color:rgba(255,255,255,0.4);text-align:center;font-size:13px">${fmt(s.stk)}</td>`
+              :`<td style="color:rgba(255,255,255,0.4);text-align:center;font-size:13px">0.0</td><td style="color:rgba(255,255,255,0.4);text-align:center;font-size:13px">0.0</td><td style="color:rgba(255,255,255,0.4);text-align:center;font-size:13px">0.0</td><td style="color:rgba(255,255,255,0.4);text-align:center;font-size:13px">0.0</td>`;
+      };
+      // season 5 record
+      const finals=S.games.filter(g=>g.status==='final'&&(g.season===5||!g.season));
+      let w=0,l=0;
+      finals.forEach(g=>{
+        if(g.n1===t.name){g.s1>g.s2?w++:l++;}
+        else if(g.n2===t.name){g.s2>g.s1?w++:l++;}
+      });
+      return `<div style="background:${cfg.bg};border-radius:16px;overflow:hidden">
+        <div style="height:6px;background:${cfg.accent}"></div>
+        <div style="padding:18px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
+            <div>
+              <div style="font-size:10px;font-weight:500;color:${cfg.accent};letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px">Season 5</div>
+              <div style="font-size:22px;font-weight:500;color:#fff;line-height:1.1">${t.name}</div>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+              <div style="font-size:10px;color:rgba(255,255,255,0.3);letter-spacing:.06em;text-transform:uppercase">Record</div>
+              <div style="font-size:20px;font-weight:500;color:${cfg.accent}">${w}–${l}</div>
+              ${ownerUnlocked?`<div style="display:flex;gap:4px;margin-top:2px"><button class="btn btg bts" style="padding:3px 8px;font-size:.7rem" onclick="openTrade('${t.id}')">🔄</button><button class="btn btd bts" style="padding:3px 8px;font-size:.7rem" onclick="deleteTeam('${t.id}')">✕</button></div>`:''}
+            </div>
           </div>
-          <div style="display:flex;gap:6px">
-            ${ownerUnlocked?`<button class="btn btg bts" style="padding:5px 11px;font-size:.75rem" onclick="openTrade('${t.id}')">🔄 Trade</button>`:''}
-            ${ownerUnlocked?`<button class="btn btd bts" style="padding:5px 11px;font-size:.75rem" onclick="deleteTeam('${t.id}')">✕</button>`:''}
+          <div style="border-top:1px solid rgba(255,255,255,0.08);padding-top:12px">
+            <table style="width:100%;border-collapse:collapse;table-layout:fixed">
+              <colgroup><col style="width:auto"><col style="width:38px"><col style="width:38px"><col style="width:38px"><col style="width:38px"></colgroup>
+              <thead><tr>
+                <th style="font-size:10px;letter-spacing:.06em;text-transform:uppercase;text-align:left;color:rgba(255,255,255,0.3);font-weight:500;padding:0 0 6px"></th>
+                <th style="font-size:10px;letter-spacing:.06em;text-transform:uppercase;text-align:center;color:rgba(255,255,255,0.3);font-weight:500;padding:0 0 6px">PPG</th>
+                <th style="font-size:10px;letter-spacing:.06em;text-transform:uppercase;text-align:center;color:rgba(255,255,255,0.3);font-weight:500;padding:0 0 6px">RPG</th>
+                <th style="font-size:10px;letter-spacing:.06em;text-transform:uppercase;text-align:center;color:rgba(255,255,255,0.3);font-weight:500;padding:0 0 6px">APG</th>
+                <th style="font-size:10px;letter-spacing:.06em;text-transform:uppercase;text-align:center;color:rgba(255,255,255,0.3);font-weight:500;padding:0 0 6px">SPG</th>
+              </tr></thead>
+              <tbody>
+                ${players.map((p,i)=>{
+                  const isCap=p.id===t.captainId;
+                  const s=p.seasons&&p.seasons['5']?p.seasons['5']:null;
+                  const gp5=s&&s.gp?s.gp:0;
+                  const fmt=(v)=>gp5>0?(v/gp5).toFixed(1):'0.0';
+                  const statColor=isCap?cfg.accent:'rgba(255,255,255,0.4)';
+                  return `${i===1?`<tr><td colspan="5" style="padding:3px 0"><div style="height:1px;background:rgba(255,255,255,0.07)"></div></td></tr>`:''}
+                  <tr>
+                    <td style="font-size:14px;color:rgba(255,255,255,0.45);padding:4px 0">${isCap?'👑 ':''}${p.name}</td>
+                    <td style="font-size:13px;color:${statColor};text-align:center;padding:4px 0">${s?fmt(s.pts):'0.0'}</td>
+                    <td style="font-size:13px;color:${statColor};text-align:center;padding:4px 0">${s?fmt(s.reb):'0.0'}</td>
+                    <td style="font-size:13px;color:${statColor};text-align:center;padding:4px 0">${s?fmt(s.ast):'0.0'}</td>
+                    <td style="font-size:13px;color:${statColor};text-align:center;padding:4px 0">${s?fmt(s.stk):'0.0'}</td>
+                  </tr>`;
+                }).join('')}
+              </tbody>
+            </table>
           </div>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:6px">
-          ${players.map((p,i)=>`<div style="display:flex;align-items:center;gap:8px">
-            <div style="width:28px;height:28px;border-radius:50%;background:${nc(p.name)};display:flex;align-items:center;justify-content:center;font-family:var(--fd);font-weight:800;font-size:.7rem;color:#fff">${ini(p.name)}</div>
-            <div style="font-size:.88rem;font-weight:600">${p.name}${p.id===t.captainId?' <span style="font-size:.65rem;color:#b8860b">CAPTAIN</span>':''}</div>
-          </div>`).join('')}
         </div>
       </div>`;
-    }).join('')}`:''}`;
+    }).join('')}
+    </div>`:''}`;
 }
 
 function pickColor(c, el){
@@ -3030,6 +3083,11 @@ function rHistory(){
       id:g.id, s:5, r:g.round||'Week 1', d:g.date||'', t1:g.n1, s1:g.s1, t2:g.n2, s2:g.s2, box1:[], box2:[]
     }));
     games = [...games, ...s5done];
+  }
+  // Filter by selected week if not "all"
+  if(activeWk!=="all"){
+    const wkLabel=activeWk.replace("W","Week ");
+    games=games.filter(g=>g.r===wkLabel);
   }
   const rounds = [...new Set(games.map(g=>g.r))].sort((a,b)=>ROUND_ORDER.indexOf(a)-ROUND_ORDER.indexOf(b));
 
