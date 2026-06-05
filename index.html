@@ -1262,10 +1262,8 @@ async function exportToSheets(){
 
   try {
     await exportBoxScores();
-    await exportAverages();
-    await exportStandings();
 
-    statusEl.textContent = '✅ Export complete!';
+    statusEl.textContent = '✅ SZN 5 box scores exported!';
     statusEl.style.color = '#15803d';
     toast('Exported to Google Sheets! 📊');
   } catch(e) {
@@ -1338,15 +1336,14 @@ async function exportAverages(){
     seasons.forEach(szn => {
       const s = p.seasons && p.seasons[szn];
       if(!s || !s.gp) return;
-      rows.push([
-        p.name,
-        'S' + szn,
-        s.gp,
-        (s.pts / s.gp).toFixed(1),
-        (s.reb / s.gp).toFixed(1),
-        (s.ast / s.gp).toFixed(1),
-        (s.stk / s.gp).toFixed(1)
-      ]);
+      // For S1-S4, stats are stored as averages already
+      // For S5, stats are stored as totals (added per game)
+      const isS5 = szn === '5';
+      const ppg = isS5 ? (s.pts/s.gp).toFixed(1) : s.pts.toFixed(1);
+      const rpg = isS5 ? (s.reb/s.gp).toFixed(1) : s.reb.toFixed(1);
+      const apg = isS5 ? (s.ast/s.gp).toFixed(1) : s.ast.toFixed(1);
+      const spg = isS5 ? (s.stk/s.gp).toFixed(1) : s.stk.toFixed(1);
+      rows.push([p.name, 'S' + szn, s.gp, ppg, rpg, apg, spg]);
     });
   });
   await clearAndWrite('Averages', rows);
