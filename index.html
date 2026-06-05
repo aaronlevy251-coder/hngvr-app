@@ -1202,14 +1202,7 @@ function renderAdminPanel(el){
   const sched=S.games.filter(g=>g.status==='scheduled');
 
   let html=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px"><div style="font-family:var(--fd);font-size:1rem;font-weight:700;color:#4a5f8a;letter-spacing:1px">ADMIN PANEL</div><button class="btn btg bts" onclick="lockAdmin()" style="width:auto">🔒 Lock</button></div>`;
-  if(ownerUnlocked){
-    html+=`<div class="card" style="margin-bottom:16px;background:#f0fdf4;border-color:#bbf7d0">
-      <div style="font-family:var(--fd);font-size:.85rem;font-weight:700;color:#15803d;margin-bottom:8px">📊 GOOGLE SHEETS EXPORT</div>
-      <div style="font-size:.75rem;color:#4a5f8a;margin-bottom:10px">Exports Season 5 box scores, player averages, and standings to HNGVR STATS sheet.</div>
-      <button class="btn btp" onclick="exportToSheets()" style="background:#15803d;width:100%">⬆️ Export Stats to Google Sheets</button>
-      <div id="export-status" style="font-size:.75rem;color:#8899bb;margin-top:8px;text-align:center"></div>
-    </div>`;
-  }
+
 
   if(live.length){
     html+=`<div class="game-section-label" style="margin-top:0">Live Games — Tap to Manage</div>`;
@@ -1251,16 +1244,12 @@ function lockAdmin(){lockManage();}
 // ═══════════════════════════════════
 // GOOGLE SHEETS EXPORT
 // ═══════════════════════════════════
-const SHEETS_ID = '1siuDslLSj3CE8qELQ2IX-oCoZXvtWSOVHNCfZT9n1Hs';
-const SHEETS_API_KEY = 'AIzaSyDe0V0wbAiz6RdQsxpEvk9umo1g1VlKiQk';
+const SHEETS_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwk9cP87bc9NqzRRQs9it71fJ3wi8ErXpIE0LxxrMAKit18yOKPqrGkJ52TzymnLUnp/exec';
 
-async function sheetsRequest(method, path, body){
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEETS_ID}${path}?key=`;
-  // Using public edit access via fetch with no auth (works for publicly editable sheets)
-  const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEETS_ID}${path}`, {
-    method,
-    headers: {'Content-Type':'application/json'},
-    body: body ? JSON.stringify(body) : undefined
+async function sendToSheet(sheetName, rows){
+  const res = await fetch(SHEETS_WEBAPP_URL, {
+    method: 'POST',
+    body: JSON.stringify({sheet: sheetName, rows: rows})
   });
   return res.json();
 }
@@ -1271,13 +1260,9 @@ async function exportToSheets(){
   statusEl.style.color = '#8899bb';
 
   try {
-    const SHEET_ID_NUM = await ensureSheetExists('SZN 5');
-    const avgSheetId = await ensureSheetExists('Averages');
-    const standingsSheetId = await ensureSheetExists('Standings');
-
-    await exportBoxScores(SHEET_ID_NUM);
-    await exportAverages(avgSheetId);
-    await exportStandings(standingsSheetId);
+    await exportBoxScores();
+    await exportAverages();
+    await exportStandings();
 
     statusEl.textContent = '✅ Export complete!';
     statusEl.style.color = '#15803d';
@@ -1290,42 +1275,11 @@ async function exportToSheets(){
   }
 }
 
-async function getSheetsList(){
-  const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEETS_ID}?fields=sheets.properties&key=${SHEETS_API_KEY}`);
-  const data = await res.json();
-  return data.sheets || [];
-}
-
-async function ensureSheetExists(title){
-  const sheets = await getSheetsList();
-  const existing = sheets.find(s => s.properties.title === title);
-  if(existing) return existing.properties.sheetId;
-
-  // Create the sheet
-  const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEETS_ID}:batchUpdate?key=${SHEETS_API_KEY}`, {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({requests:[{addSheet:{properties:{title}}}]})
-  });
-  const data = await res.json();
-  return data.replies[0].addSheet.properties.sheetId;
-}
-
 async function clearAndWrite(sheetTitle, rows){
-  // Clear sheet first
-  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEETS_ID}/values/${encodeURIComponent(sheetTitle)}:clear?key=${SHEETS_API_KEY}`, {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'}
-  });
-  // Write rows
-  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEETS_ID}/values/${encodeURIComponent(sheetTitle+'!A1')}?valueInputOption=RAW&key=${SHEETS_API_KEY}`, {
-    method: 'PUT',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({values: rows})
-  });
+  await sendToSheet(sheetTitle, rows);
 }
 
-async function exportBoxScores(sheetId){
+async function exportBoxScores(){
   const finalGames = S.games.filter(g => g.status === 'final' && (g.season === 5 || !g.season));
   if(!finalGames.length){ return; }
 
@@ -1380,7 +1334,7 @@ async function exportBoxScores(sheetId){
   await clearAndWrite('SZN 5', rows);
 }
 
-async function exportAverages(sheetId){
+async function exportAverages(){
   const rows = [['Player', 'Season', 'GP', 'PPG', 'RPG', 'APG', 'SPG']];
   const seasons = ['5','4','3','2','1'];
   S.players.filter(p => p.active).forEach(p => {
@@ -1401,7 +1355,7 @@ async function exportAverages(sheetId){
   await clearAndWrite('Averages', rows);
 }
 
-async function exportStandings(sheetId){
+async function exportStandings(){
   const rows = [];
   const sznList = [5,4,3,2,1];
   for(const szn of sznList){
@@ -3109,6 +3063,12 @@ function rSchedule(){
     </div>
     <button class="btn btp mt8" onclick="schedGame()">+ Schedule Game</button>
   </div>
+  ${ownerUnlocked?`<div class="card" style="margin-bottom:16px;background:#f0fdf4;border-color:#bbf7d0">
+    <div style="font-family:var(--fd);font-size:.85rem;font-weight:700;color:#15803d;margin-bottom:8px">📊 GOOGLE SHEETS EXPORT</div>
+    <div style="font-size:.75rem;color:#4a5f8a;margin-bottom:10px">Exports Season 5 box scores, player averages, and standings to HNGVR STATS sheet.</div>
+    <button class="btn btp" onclick="exportToSheets()" style="background:#15803d;width:100%">⬆️ Export Stats to Google Sheets</button>
+    <div id="export-status" style="font-size:.75rem;color:#8899bb;margin-top:8px;text-align:center"></div>
+  </div>`:''}
   <div style="font-size:.65rem;letter-spacing:2px;text-transform:uppercase;color:#8899bb;font-weight:700;margin:14px 0 8px">All Games (${S.games.length})</div>
   ${sorted.map(g=>`<div class="card" style="padding:12px 14px;margin-bottom:8px">
     <div style="display:flex;align-items:center;justify-content:space-between">
