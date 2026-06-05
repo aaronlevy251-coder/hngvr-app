@@ -1202,6 +1202,14 @@ function renderAdminPanel(el){
   const sched=S.games.filter(g=>g.status==='scheduled');
 
   let html=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px"><div style="font-family:var(--fd);font-size:1rem;font-weight:700;color:#4a5f8a;letter-spacing:1px">ADMIN PANEL</div><button class="btn btg bts" onclick="lockAdmin()" style="width:auto">🔒 Lock</button></div>`;
+  if(ownerUnlocked){
+    html+=`<div class="card" style="margin-bottom:16px;background:#f0fdf4;border-color:#bbf7d0">
+      <div style="font-family:var(--fd);font-size:.85rem;font-weight:700;color:#15803d;margin-bottom:8px">📊 GOOGLE SHEETS EXPORT</div>
+      <div style="font-size:.75rem;color:#4a5f8a;margin-bottom:10px">Exports Season 5 box scores, player averages, and standings to HNGVR STATS sheet.</div>
+      <button class="btn btp" onclick="exportToSheets()" style="background:#15803d;width:100%">⬆️ Export Stats to Google Sheets</button>
+      <div id="export-status" style="font-size:.75rem;color:#8899bb;margin-top:8px;text-align:center"></div>
+    </div>`;
+  }
 
   if(live.length){
     html+=`<div class="game-section-label" style="margin-top:0">Live Games — Tap to Manage</div>`;
@@ -1239,6 +1247,179 @@ function renderAdminPanel(el){
 }
 
 function lockAdmin(){lockManage();}
+
+// ═══════════════════════════════════
+// GOOGLE SHEETS EXPORT
+// ═══════════════════════════════════
+const SHEETS_ID = '1siuDslLSj3CE8qELQ2IX-oCoZXvtWSOVHNCfZT9n1Hs';
+
+async function sheetsRequest(method, path, body){
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEETS_ID}${path}?key=`;
+  // Using public edit access via fetch with no auth (works for publicly editable sheets)
+  const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEETS_ID}${path}`, {
+    method,
+    headers: {'Content-Type':'application/json'},
+    body: body ? JSON.stringify(body) : undefined
+  });
+  return res.json();
+}
+
+async function exportToSheets(){
+  const statusEl = document.getElementById('export-status');
+  statusEl.textContent = '⏳ Exporting...';
+  statusEl.style.color = '#8899bb';
+
+  try {
+    const SHEET_ID_NUM = await ensureSheetExists('SZN 5');
+    const avgSheetId = await ensureSheetExists('Averages');
+    const standingsSheetId = await ensureSheetExists('Standings');
+
+    await exportBoxScores(SHEET_ID_NUM);
+    await exportAverages(avgSheetId);
+    await exportStandings(standingsSheetId);
+
+    statusEl.textContent = '✅ Export complete!';
+    statusEl.style.color = '#15803d';
+    toast('Exported to Google Sheets! 📊');
+  } catch(e) {
+    console.error('Export error:', e);
+    statusEl.textContent = '❌ Export failed — check console';
+    statusEl.style.color = '#E8192C';
+    toast('Export failed: ' + e.message, '#E8192C');
+  }
+}
+
+async function getSheetsList(){
+  const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEETS_ID}?fields=sheets.properties`);
+  const data = await res.json();
+  return data.sheets || [];
+}
+
+async function ensureSheetExists(title){
+  const sheets = await getSheetsList();
+  const existing = sheets.find(s => s.properties.title === title);
+  if(existing) return existing.properties.sheetId;
+
+  // Create the sheet
+  const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEETS_ID}:batchUpdate`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({requests:[{addSheet:{properties:{title}}}]})
+  });
+  const data = await res.json();
+  return data.replies[0].addSheet.properties.sheetId;
+}
+
+async function clearAndWrite(sheetTitle, rows){
+  // Clear sheet first
+  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEETS_ID}/values/${encodeURIComponent(sheetTitle)}:clear`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'}
+  });
+  // Write rows
+  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEETS_ID}/values/${encodeURIComponent(sheetTitle+'!A1')}?valueInputOption=RAW`, {
+    method: 'PUT',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({values: rows})
+  });
+}
+
+async function exportBoxScores(sheetId){
+  const finalGames = S.games.filter(g => g.status === 'final' && (g.season === 5 || !g.season));
+  if(!finalGames.length){ return; }
+
+  // Group plays by round
+  const byRound = {};
+  finalGames.forEach(g => {
+    const round = g.round || 'Week 1';
+    if(!byRound[round]) byRound[round] = [];
+    byRound[round].push(g);
+  });
+
+  const rows = [];
+  const roundOrder = ['Week 1','Week 2','Week 3','Week 4','Week 5','Week 6','Week 7','Playoffs','Finals'];
+  const sortedRounds = Object.keys(byRound).sort((a,b) => {
+    const ai = roundOrder.indexOf(a), bi = roundOrder.indexOf(b);
+    return (ai===-1?99:ai) - (bi===-1?99:bi);
+  });
+
+  sortedRounds.forEach(round => {
+    rows.push([round, 'Points', 'Rebounds', 'Assists', 'Stocks']);
+    byRound[round].forEach(g => {
+      // Add game header
+      rows.push([`${g.n1} ${g.s1} — ${g.s2} ${g.n2}`]);
+      // Add plays/box score
+      const allPlays = g.plays || [];
+      // Build box score from plays
+      const box = {};
+      allPlays.forEach(play => {
+        const p = S.players.find(pl => pl.id === play.pid);
+        if(!p) return;
+        if(!box[p.name]) box[p.name] = {pts:0, reb:0, ast:0, stk:0};
+        if(play.type === 'pts') box[p.name].pts += play.pts || 0;
+        if(play.type === 'reb') box[p.name].reb += 1;
+        if(play.type === 'ast') box[p.name].ast += 1;
+        if(play.type === 'stk') box[p.name].stk += 1;
+      });
+      // Also include snap stats if available
+      allPlays.forEach(play => {
+        if(play.snap1) {
+          const p = S.players.find(pl => pl.id === play.pid);
+          if(p) box[p.name] = {pts: play.snap1||0, reb: play.snap2||0, ast: 0, stk: 0};
+        }
+      });
+      Object.entries(box).forEach(([name, stats]) => {
+        rows.push([name, stats.pts, stats.reb, stats.ast, stats.stk]);
+      });
+      rows.push([]); // spacer
+    });
+    rows.push([]); // spacer between weeks
+  });
+
+  await clearAndWrite('SZN 5', rows);
+}
+
+async function exportAverages(sheetId){
+  const rows = [['Player', 'Season', 'GP', 'PPG', 'RPG', 'APG', 'SPG']];
+  const seasons = ['5','4','3','2','1'];
+  S.players.filter(p => p.active).forEach(p => {
+    seasons.forEach(szn => {
+      const s = p.seasons && p.seasons[szn];
+      if(!s || !s.gp) return;
+      rows.push([
+        p.name,
+        'S' + szn,
+        s.gp,
+        (s.pts / s.gp).toFixed(1),
+        (s.reb / s.gp).toFixed(1),
+        (s.ast / s.gp).toFixed(1),
+        (s.stk / s.gp).toFixed(1)
+      ]);
+    });
+  });
+  await clearAndWrite('Averages', rows);
+}
+
+async function exportStandings(sheetId){
+  const rows = [];
+  const sznList = [5,4,3,2,1];
+  for(const szn of sznList){
+    rows.push([`Season ${szn} Standings`]);
+    rows.push(['Rank', 'Team', 'W', 'L', 'DIFF']);
+    let standings;
+    if(szn === 5){
+      standings = getS5StandingsRows();
+    } else {
+      standings = sortStandings(HIST_STANDINGS[szn] || [], szn);
+    }
+    standings.forEach((t, i) => {
+      rows.push([i+1, t.t, t.w, t.l, (t.pf - t.pa) > 0 ? '+' + (t.pf - t.pa) : (t.pf - t.pa)]);
+    });
+    rows.push([]);
+  }
+  await clearAndWrite('Standings', rows);
+}
+
 
 // ═══════════════════════════════════
 // ADMIN GAME MODAL — 4 tabs
